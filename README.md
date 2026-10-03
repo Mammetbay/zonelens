@@ -55,17 +55,28 @@ project virtual environment; activation is optional when calling its executables
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-# RTX 50-series: use a CUDA 12.8 wheel. This is a multi-GB download.
-.\.venv\Scripts\python.exe -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+# Project GPU target: CUDA 13.0. This is a multi-GB download.
+.\.venv\Scripts\python.exe -m pip install "torch==2.11.0+cu130" "torchvision==0.26.0+cu130" --index-url https://download.pytorch.org/whl/cu130
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]" --index-url https://pypi.org/simple
 ```
 
-These CUDA packages were found on the official index; the local download was
-interrupted, so this combination is not yet runtime-validated. For CPU-only
-installation, use `https://download.pytorch.org/whl/cpu` in the PyTorch command.
+The project targets CUDA **13.0** (`cu130`). These exact packages are available
+for Python 3.14 on Windows in the official index, but local installation and GPU
+inference are still pending. The earlier CUDA 12.8 download attempt was abandoned.
+The `+cu130` suffix selects the CUDA build explicitly, including when a different
+build of the same PyTorch version is already installed.
 See the [official installation guide](https://pytorch.org/get-started/locally/)
 if a wheel is unavailable for your Python version. A separate CUDA Toolkit is
 not required for these prebuilt wheels.
+
+Verify the CUDA runtime used by the installed PyTorch package:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import torch; print(torch.__version__, torch.version.cuda); assert torch.version.cuda == '13.0'; assert torch.cuda.is_available(); print(torch.cuda.get_device_name(0))"
+```
+
+This checks the package runtime and GPU availability; the video run below verifies
+actual inference. The CUDA-enabled build also supports `--device cpu`.
 
 Place a video you have permission to use at `samples/people.mp4`, or supply its
 full path. No sample footage is bundled. Run commands from the repository root:

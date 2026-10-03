@@ -34,7 +34,8 @@ They do not download models or require a GPU.
    redistribution permission in your local notes; do not commit private footage.
 2. Run `--read-only` and confirm the expected number of frames is decoded.
 3. Run with `--device 0 --show`; check boxes, confidence, IDs, and the two FPS values.
-4. Confirm `summary.json` says `device: cuda:0`, `stop_reason: end_of_file`, and
+4. Confirm `summary.json` says `device: cuda:0`, `cuda_runtime: 13.0`,
+   `stop_reason: end_of_file`, and
    `tracked_frames` is nonzero. Open `annotated.mp4` and inspect moving people.
 5. Repeat with identical settings in a new output directory. Compare
    `tracks_sha256` in both summaries and inspect any differences. GPU operations
@@ -58,9 +59,11 @@ Detected on the Windows development machine:
 - Node 22.21.0 and pnpm 12.8.1 (not needed for M0/M1).
 - GitHub repository and connected account access verified; GitHub CLI is absent.
 - A project `.venv` was created.
-- The official CUDA 12.8 index offers Python 3.14 Windows wheels for
-  torch 2.11.0 and torchvision 0.26.0. Download failed after approximately
-  24 MB of the 2771 MB torch wheel. GPU inference is **not yet verified**.
+- The selected GPU target is now CUDA 13.0 (`cu130`), as requested by the user.
+  The official index lists Python 3.14 Windows wheels for torch 2.11.0+cu130
+  and torchvision 0.26.0+cu130. Installation and GPU inference are **not yet verified**.
+- Historical attempt: the earlier CUDA 12.8 download failed after approximately
+  24 MB of the 2771 MB torch wheel. Use the current cu130 README command going forward.
 
 The NVIDIA driver display alone does not prove PyTorch compatibility. The real
 model warm-up and file run must succeed before recording GPU acceptance.
@@ -83,6 +86,7 @@ access for GitHub issues.
 ## References
 
 - [PyTorch installation](https://pytorch.org/get-started/locally/)
-- [Official CUDA 12.8 wheels](https://download.pytorch.org/whl/cu128)
+- [Official CUDA 13.0 torch wheels](https://download.pytorch.org/whl/cu130/torch/)
+- [Official CUDA 13.0 torchvision wheels](https://download.pytorch.org/whl/cu130/torchvision/)
 - [Ultralytics tracking](https://docs.ultralytics.com/modes/track/)
 - [YOLO11 models](https://docs.ultralytics.com/models/yolo11/)

@@ -109,6 +109,7 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
                 "config": asdict(config), "device": actual_device,
                 "gpu": torch.cuda.get_device_name(0) if device == "0" else None,
                 "torch": torch.__version__, "ultralytics": ultralytics.__version__,
+                "cuda_runtime": torch.version.cuda,
                 "frames": frames, "reported_source_frames": source.frame_count,
                 "source_fps": source.fps, "processing_fps": frames / elapsed,
                 "mean_inference_ms": inference_ms / frames,
