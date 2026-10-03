@@ -4,7 +4,7 @@ Local-first video analytics for IP cameras, webcams, and video files.
 
 ZoneLens is an open-source project for detecting and tracking objects, counting line crossings, and monitoring user-defined zones. The goal is to build a practical computer vision application that runs on your own computer.
 
-> **Status: early development.** This repository currently contains project documentation and a license. The features below are planned, and there is no runnable application yet.
+> **Status: early prototype.** A video-file CLI implements person detection and tracking. GPU inference and real-video acceptance are still pending; see [implementation status](docs/roadmap.md).
 
 ## Planned features
 
@@ -23,7 +23,7 @@ Video frames will pass through an object detector, a tracker, and a rule engine.
 
 Tracking IDs are temporary labels, not personal identities. Face recognition and cross-camera identity matching are outside the initial scope.
 
-## Planned stack
+## Stack
 
 | Component | Technology |
 | --- | --- |
@@ -47,7 +47,59 @@ The initial development target is Windows 11. A small pretrained model will be u
 
 ## Getting started
 
-There are no installation or run commands yet. They will be added with the first working prototype. Video-file support will make it possible to try ZoneLens without an IP camera.
+### Windows PowerShell
+
+Python 3.11 or newer is required. Development started with Python 3.14. Use a
+project virtual environment; activation is optional when calling its executables directly.
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+# RTX 50-series: use a CUDA 12.8 wheel. This is a multi-GB download.
+.\.venv\Scripts\python.exe -m pip install torch==2.11.0 torchvision==0.26.0 --index-url https://download.pytorch.org/whl/cu128
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]" --index-url https://pypi.org/simple
+```
+
+These CUDA packages were found on the official index; the local download was
+interrupted, so this combination is not yet runtime-validated. For CPU-only
+installation, use `https://download.pytorch.org/whl/cpu` in the PyTorch command.
+See the [official installation guide](https://pytorch.org/get-started/locally/)
+if a wheel is unavailable for your Python version. A separate CUDA Toolkit is
+not required for these prebuilt wheels.
+
+Place a video you have permission to use at `samples/people.mp4`, or supply its
+full path. No sample footage is bundled. Run commands from the repository root:
+
+```powershell
+# M0: decode the entire file without loading YOLO.
+.\.venv\Scripts\zonelens.exe samples/people.mp4 --read-only
+# M1: track people, show a preview, and save results.
+.\.venv\Scripts\zonelens.exe samples/people.mp4 --config configs/video.toml --device 0 --show --output outputs/run1
+# Repeat for comparison; each run requires a new output directory.
+.\.venv\Scripts\zonelens.exe samples/people.mp4 --config configs/video.toml --device 0 --output outputs/run2
+# Short CPU comparison.
+.\.venv\Scripts\zonelens.exe samples/people.mp4 --device cpu --max-frames 30 --output outputs/cpu
+```
+
+The first tracking run downloads `yolo11n.pt` from Ultralytics. Later runs can
+use the cached weights offline. Model weights and all videos are ignored by Git.
+Only load model files from sources you trust. `device = "auto"` selects CUDA
+when available and otherwise uses CPU; explicit `--device 0` fails if CUDA is
+unavailable. Runtime GPU errors are reported rather than silently changing devices.
+
+Each output directory contains:
+
+- `annotated.mp4`: boxes, confidence, temporary IDs, and FPS overlay (without audio).
+- `tracks.jsonl`: per-frame person boxes, IDs, and video timestamps.
+- `summary.json`: actual model device, versions, timing, stop reason, and a hash
+  of tracking records for comparing repeated runs.
+
+Press **Q** or **Escape** in the preview to finish early, or **Ctrl+C** in the
+terminal to interrupt. Existing output directories are never overwritten.
+Use constant frame rate footage. Camera input is not implemented yet.
+
+See [development and short validation steps](docs/development.md) for the data
+flow, measurement definitions, and current environment findings.
 
 ## Limitations and data
 
@@ -57,7 +109,7 @@ Local processing is a core design goal. Keep camera credentials and private foot
 
 ## Contributing
 
-Suggestions and focused issues are welcome. Please discuss larger changes in an issue before starting work. A development guide will be added as the implementation takes shape.
+Suggestions and focused issues are welcome. Please discuss larger changes in an issue before starting work. See the [development guide](docs/development.md).
 
 ## License
 

@@ -1,0 +1,7 @@
+# COCO person class (0), with ByteTrack association between consecutive frames.
+model = "yolo11n.pt"
+device = "auto"
+imgsz = 640
+confidence = 0.10
+iou = 0.70
+tracker = "bytetrack.yaml"
