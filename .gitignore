@@ -1,3 +1,7 @@
+plan.md
+
+/plan.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -218,3 +222,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ZoneLens local media, model weights, and generated results
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.pt
+*.onnx
+*.engine
+*.sqlite*
+.env.*
+!.env.example
+outputs/
+models/
+.local/
