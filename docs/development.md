@@ -72,6 +72,14 @@ pytest, and Ruff installation also failed to obtain packages from the configured
 index and explicit PyPI index. Therefore the video tests and Ruff were not run.
 Full dependency pinning should follow the first successful installation and run.
 
+A later retry reached the PyPI index and resolved OpenCV 4.14.0.94, but its
+41.2 MB wheel remained at zero downloaded bytes while the pip process stayed
+alive. The stalled installation was stopped. The virtual environment still
+contains only pip; complete installation in a working network environment before
+running the video acceptance checks. Local commits also remain unpublished
+because terminal Git authentication is unavailable, despite working connector
+access for GitHub issues.
+
 ## References
 
 - [PyTorch installation](https://pytorch.org/get-started/locally/)
