@@ -25,8 +25,10 @@ after occlusion, and must not be interpreted as unique people counts.
 .\.venv\Scripts\python.exe -m ruff check backend
 ```
 
-Tests exercise invalid configuration, file EOF, and cleanup after consumer failure.
-They do not download models or require a GPU.
+Tests exercise invalid configuration, file EOF, cleanup after consumer failure,
+and device reporting when the predictor owns a separate model copy. The CUDA
+device tests mock the GPU-name lookup; tests do not download weights or require
+a GPU. Install the project's runtime and development dependencies first.
 
 ## Manual acceptance (M0/M1)
 
@@ -50,38 +52,59 @@ Ultralytics' inference timing and excludes tracking and rendering. The overlay i
 a running estimate; the final summary includes the last frame's writing/display.
 Output has no audio. Preview runs at processing speed, not timed playback speed.
 
-## Environment check: 2026-10-03
+## Local validation: 2026-10-07
 
-Detected on the Windows development machine:
+The earlier installation blockers have been resolved. Validation used Windows,
+Python 3.14.0, an NVIDIA GeForce RTX 5060 Ti, torch 2.14.0+cu130,
+torchvision 0.29.1+cu130, Ultralytics 8.4.174, OpenCV 5.0.0.93, and lap 0.5.13.
+The local venv exposes global packages. A clean isolated environment remains the
+recommended setup for contributors; this session did not validate a fresh install.
+OpenCV 5 is now allowed by the package metadata following these runs.
 
-- Python 3.14.0, pip 25.2; `python` works, but `py -0p` finds no registered interpreter.
-- NVIDIA GeForce RTX 5060 Ti, 16311 MiB reported VRAM, driver 617.14.
-- Node 22.21.0 and pnpm 12.8.1 (not needed for M0/M1).
-- GitHub repository and connected account access verified; GitHub CLI is absent.
-- A project `.venv` was created.
-- The selected GPU target is now CUDA 13.0 (`cu130`), as requested by the user.
-  The official index lists Python 3.14 Windows wheels for torch 2.11.0+cu130
-  and torchvision 0.26.0+cu130. Installation and GPU inference are **not yet verified**.
-- Historical attempt: the earlier CUDA 12.8 download failed after approximately
-  24 MB of the 2771 MB torch wheel. Use the current cu130 README command going forward.
+The local clip contains 414 frames at 25 FPS (16.56 seconds). Its provenance has
+not yet been recorded in the repository; no footage or weights are distributed.
+All runs below use YOLO11n, ByteTrack, image size 640, confidence 0.10, and IoU 0.70.
 
-The NVIDIA driver display alone does not prove PyTorch compatibility. The real
-model warm-up and file run must succeed before recording GPU acceptance.
-No benchmark or tracking accuracy is claimed without a real run.
+| Run | Frames | Device | Processing FPS | Mean inference | Stop reason |
+| --- | ---: | --- | ---: | ---: | --- |
+| Corrected full-file run, no preview | 414 | cuda:0 | 56.47 | 6.14 ms | end_of_file |
+| Short CPU check, no preview | 30 | cpu | 31.25 | 19.31 ms | frame_limit |
 
-Checks completed in this session: Python compilation, `git diff --check`, loading
-the example TOML, and rejection of six invalid inference settings. OpenCV,
-pytest, and Ruff installation also failed to obtain packages from the configured
-index and explicit PyPI index. Therefore the video tests and Ruff were not run.
-Full dependency pinning should follow the first successful installation and run.
+The GPU run took 7.33 seconds of processing plus 16.42 seconds of setup. The CPU
+check took 0.96 seconds of processing plus 1.14 seconds of setup. These runs use
+different frame counts and are not a controlled CPU/GPU speedup benchmark.
+Preview, disk I/O, warm-up, and system load affect observed times.
 
-A later retry reached the PyPI index and resolved OpenCV 4.14.0.94, but its
-41.2 MB wheel remained at zero downloaded bytes while the pip process stayed
-alive. The stalled installation was stopped. The virtual environment still
-contains only pip; complete installation in a working network environment before
-running the video acceptance checks. Local commits also remain unpublished
-because terminal Git authentication is unavailable, despite working connector
-access for GitHub issues.
+Five earlier full-file runs each processed all 414 frames with at least one
+tracked person in every frame and assigned 51 distinct track IDs. All five
+produced the same tracking hash, and the corrected GPU run matched it:
+
+```text
+8baaa388084500b572130a494f538f4a504065cacd160c21308fc53c8418e8b5
+```
+
+The maintainer visually inspected the results and considers detection/tracking
+sufficient to proceed with line counting. This is a qualitative review of one
+clip, not measured precision, recall, ID-switch frequency, or a distinct-person
+count. A documented sample license and manual Q/Escape/Ctrl+C checks remain open.
+
+Automated validation: 12 tests pass, including separate CUDA-copy and CPU device
+reporting cases. Ruff import-order findings were corrected.
+
+## Why device reporting changed
+
+In the installed Ultralytics version, the predictor deep-copies the original
+model before selecting the inference device. Reading `model.model.parameters()`
+therefore inspected the original CPU model, even when the predictor used CUDA.
+After warm-up, ZoneLens now reads `model.predictor.device` and derives the GPU
+name from that same device. CPU runs report `gpu: null` even with CUDA available.
+The `cuda_runtime` field describes the installed PyTorch build, so it may still
+say `13.0` during a CPU run. Previous local output files are retained unchanged;
+generate a new run to get corrected metadata.
+
+An earlier `torchvision::nms` CUDA failure was a separate installation issue:
+torchvision was a CPU build. GPU availability in torch alone is not sufficient;
+both packages need compatible CUDA builds. See the README's direct NMS check.
 
 ## References
 

@@ -7,9 +7,10 @@
 - [x] Sequential file reader with cleanup and a read-only CLI mode.
 - [x] CPU selection and automatic CPU fallback when CUDA is unavailable.
 - [x] Installation and run instructions.
-- [ ] Complete dependency installation and actual GPU model inference.
+- [x] Complete dependency installation and actual GPU model inference.
 - [ ] Choose a person video and document its usage/redistribution rights.
-- [ ] Run the file to EOF and verify output cleanup on Windows.
+- [x] Run the file to EOF and produce output on Windows.
+- [ ] Manually verify Q, Escape, and Ctrl+C cleanup on Windows.
 
 ## M1: person detection and tracking
 
@@ -17,11 +18,28 @@
 - [x] Render boxes, confidence, tracking IDs, and separate FPS measurements.
 - [x] Configure model, image size, thresholds, and device through TOML.
 - [x] Write annotated video, frame records, and a machine-readable summary.
-- [ ] Visually inspect results on a real person video.
-- [ ] Repeat the same video and record comparison and performance results.
+- [x] Visually inspect results on a real person video (maintainer review).
+- [x] Repeat the same video and record comparison and performance results.
+- [x] Report the active predictor device, with CPU/CUDA regression coverage.
 
-Implementation is present; runtime acceptance remains pending. Follow-up issues
+Core M0/M1 functionality has been exercised on a 414-frame person clip. The
+maintainer considers YOLO11n sufficient for the next step based on visual review;
+this is not a labeled accuracy benchmark. See [validation results](development.md).
+Remaining acceptance work includes sample provenance and manual interruption
+checks. Follow-up issues
 are maintained in [GPU/video acceptance #1](https://github.com/Mammetbay/zonelens/issues/1)
 and [sample footage #2](https://github.com/Mammetbay/zonelens/issues/2).
-M2 line crossing, web UI, and camera support are outside
-this prototype task.
+
+## M2: line crossing (next)
+
+- [ ] Configure a counting line and crossing directions.
+- [ ] Count crossings using track movement without counting every frame.
+- [ ] Test direction, repeated crossings, and track loss.
+- [ ] Compare results against a manual count on documented footage.
+
+## Later milestones
+
+- [ ] Zone occupancy and dwell-time events.
+- [ ] FastAPI, SQLite event storage, and a React web interface.
+- [ ] Webcam/RTSP input and reconnection handling.
+- [ ] Parking occupancy and release packaging.

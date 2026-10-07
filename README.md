@@ -4,7 +4,7 @@ Local-first video analytics for IP cameras, webcams, and video files.
 
 ZoneLens is an open-source project for detecting and tracking objects, counting line crossings, and monitoring user-defined zones. The goal is to build a practical computer vision application that runs on your own computer.
 
-> **Status: early prototype.** A video-file CLI implements person detection and tracking. GPU inference and real-video acceptance are still pending; see [implementation status](docs/roadmap.md).
+> **Status: working video-file prototype.** YOLO11n person detection and ByteTrack tracking have been exercised on a real clip, including CUDA inference on Windows. The maintainer reviewed the output and considers it sufficient for the next development step. Line counting, zones, camera input, and the web interface are still planned. See [implementation status](docs/roadmap.md).
 
 ## Planned features
 
@@ -29,16 +29,16 @@ Tracking IDs are temporary labels, not personal identities. Face recognition and
 | --- | --- |
 | Computer vision | Python, OpenCV, PyTorch, Ultralytics YOLO |
 | Object tracking | ByteTrack |
-| Backend | FastAPI |
-| Frontend | React, TypeScript, Vite |
-| Event storage | SQLite |
-| Live updates | WebSocket |
+| Backend (planned) | FastAPI |
+| Frontend (planned) | React, TypeScript, Vite |
+| Event storage (planned) | SQLite |
+| Live updates (planned) | WebSocket |
 
-The initial development target is Windows 11. A small pretrained model will be used before considering fine-tuning. Hardware requirements and performance results will be published after testing.
+The initial development target is Windows 11. The prototype uses a small pretrained model without fine-tuning. Initial measurements and their limitations are recorded in the [development guide](docs/development.md).
 
 ## Roadmap
 
-- [ ] **First prototype:** detect and track people in a video file.
+- [x] **First prototype:** detect and track people in a video file.
 - [ ] **Line counting:** count crossings and compare results with manual counts.
 - [ ] **Web interface:** draw lines and zones, view live results, and browse events.
 - [ ] **Camera support:** connect an RTSP camera and handle stream interruptions.
@@ -56,13 +56,12 @@ project virtual environment; activation is optional when calling its executables
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 # Project GPU target: CUDA 13.0. This is a multi-GB download.
-.\.venv\Scripts\python.exe -m pip install "torch==2.11.0+cu130" "torchvision==0.26.0+cu130" --index-url https://download.pytorch.org/whl/cu130
+.\.venv\Scripts\python.exe -m pip install "torch==2.14.0+cu130" "torchvision==0.29.1+cu130" --index-url https://download.pytorch.org/whl/cu130
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]" --index-url https://pypi.org/simple
 ```
 
-The project targets CUDA **13.0** (`cu130`). These exact packages are available
-for Python 3.14 on Windows in the official index, but local installation and GPU
-inference are still pending. The earlier CUDA 12.8 download attempt was abandoned.
+The project targets CUDA **13.0** (`cu130`). The package pair above was used
+for local validation with Python 3.14 and an NVIDIA GeForce RTX 5060 Ti.
 The `+cu130` suffix selects the CUDA build explicitly, including when a different
 build of the same PyTorch version is already installed.
 See the [official installation guide](https://pytorch.org/get-started/locally/)
@@ -77,6 +76,19 @@ Verify the CUDA runtime used by the installed PyTorch package:
 
 This checks the package runtime and GPU availability; the video run below verifies
 actual inference. The CUDA-enabled build also supports `--device cpu`.
+
+Both **torch and torchvision** need CUDA builds. If inference fails with
+`torchvision::nms` unavailable for CUDA, check `torchvision.__version__`: a
+`+cpu` build cannot perform the GPU operation, even when PyTorch detects the GPU.
+Install the CUDA pair above using the same Python interpreter as ZoneLens.
+
+To verify that operation directly:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import torch, torchvision; b=torch.tensor([[0.,0.,10.,10.]],device='cuda'); s=torch.tensor([0.9],device='cuda'); print(torchvision.ops.nms(b,s,0.5))"
+```
+
+Expected result: `tensor([0], device='cuda:0')`.
 
 Place a video you have permission to use at `samples/people.mp4`, or supply its
 full path. No sample footage is bundled. Run commands from the repository root:
@@ -108,6 +120,33 @@ Each output directory contains:
 Press **Q** or **Escape** in the preview to finish early, or **Ctrl+C** in the
 terminal to interrupt. Existing output directories are never overwritten.
 Use constant frame rate footage. Camera input is not implemented yet.
+
+## Understanding your results
+
+OpenCV decodes each video frame, YOLO finds person boxes, and ByteTrack matches
+detections across frames to assign temporary IDs. This runs a pretrained model;
+it does not train a new model or recognize anyone's identity.
+
+| Result | Meaning |
+| --- | --- |
+| Box, ID, confidence | A detected region, a temporary track label, and a model score (not measured accuracy). |
+| `device` / `gpu` | The active predictor device and its GPU name; CPU runs report `gpu: null`. |
+| `frames` / `source_fps` | Number of frames processed and the source video's playback rate. |
+| `processing_fps` | Throughput including decoding, tracking, drawing, writing, and any preview; excludes setup. |
+| `tracked_frames` | Frames with at least one assigned track ID, not frames where every person was found. |
+| `unique_track_ids` | Different track labels assigned, not the number of distinct people. |
+| `stop_reason` | `end_of_file` for completion, `frame_limit` or `user_stop` for intentional early stops. |
+| `tracks_sha256` | Fingerprint of tracking records for repeat comparisons; matching values do not establish accuracy. |
+
+Start with 10–30 seconds of clear walking footage, preferably a fixed camera,
+720p/1080p, and constant 25/30 FPS. Inspect missed people, false boxes, and ID
+changes when people overlap or leave/re-enter the frame. Keep the source and
+license in your notes; see [sample guidance](samples/README.md).
+
+Older local summaries may report `device: cpu` even when CUDA was requested:
+the original implementation inspected the source model instead of the active
+predictor's copy. New runs report the predictor device; old output files are not
+rewritten. Re-run into a new output directory to obtain a corrected summary.
 
 See [development and short validation steps](docs/development.md) for the data
 flow, measurement definitions, and current environment findings.
