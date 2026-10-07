@@ -1,8 +1,8 @@
 """File inference session; one model and tracker per run."""
 
-from dataclasses import asdict
 import hashlib
 import json
+from dataclasses import asdict
 from pathlib import Path
 from time import perf_counter
 
@@ -27,6 +27,13 @@ def select_device(requested: str) -> str:
     return requested
 
 
+def inference_device_info(model) -> tuple[str, str | None]:
+    """Read the initialized predictor, which may own a copy of the original model."""
+    device = torch.device(model.predictor.device)
+    gpu = torch.cuda.get_device_name(device) if device.type == "cuda" else None
+    return str(device), gpu
+
+
 def run(source_path: Path, config: Config, output: Path, show=False, max_frames=None):
     # Refuse accidental replacement of previous results or source footage.
     output.mkdir(parents=True, exist_ok=False)
@@ -47,7 +54,7 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
             # Real warm-up verifies CUDA kernels before processing the file.
             model.predict(np.zeros((config.imgsz, config.imgsz, 3), dtype=np.uint8),
                           device=device, imgsz=config.imgsz, verbose=False)
-            actual_device = str(next(model.model.parameters()).device)
+            actual_device, gpu = inference_device_info(model)
             print(f"Model device: {actual_device}; source FPS: {source.fps:.2f}")
             setup_seconds = perf_counter() - start
             processing_start = perf_counter()
@@ -107,7 +114,7 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
                 print("Warning: decoding stopped before the reported frame count.")
             summary = {
                 "config": asdict(config), "device": actual_device,
-                "gpu": torch.cuda.get_device_name(0) if device == "0" else None,
+                "gpu": gpu,
                 "torch": torch.__version__, "ultralytics": ultralytics.__version__,
                 "cuda_runtime": torch.version.cuda,
                 "frames": frames, "reported_source_frames": source.frame_count,
