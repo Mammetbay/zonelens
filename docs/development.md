@@ -106,6 +106,29 @@ An earlier `torchvision::nms` CUDA failure was a separate installation issue:
 torchvision was a CPU build. GPU availability in torch alone is not sufficient;
 both packages need compatible CUDA builds. See the README's direct NMS check.
 
+## Line counting validation: 2026-10-08
+
+Optional `[line]` configuration now enables a finite counting segment. The
+independent `line_counter.py` rule follows box bottom centers, confirms side
+changes outside a deadband, and expires missing IDs after a configurable gap.
+The pipeline writes `events.jsonl`, draws the directed line and direction totals,
+and includes `line_counts` in the summary. Existing inference configurations
+continue to run with counting disabled.
+
+Automated validation: **37 tests pass**, and Ruff passes. New cases cover both
+directions, repeated crossings, jitter, initial points on the line, finite segment
+geometry, multiple people, untracked boxes, track expiry, configuration validation,
+and pipeline outputs with counting enabled and disabled. The integration test uses
+scripted detections with known crossings and verifies a decodable output video.
+
+A full CUDA run on the existing 414-frame, 25 FPS clip completed to EOF using
+`configs/line.toml`, with no preview. Output is local at
+`outputs/line-m2-20261008`: **in: 0, out: 1**, 35.16 processing FPS, and
+12.43 ms mean inference. The crossing was confirmed at frame 236 (9440 ms).
+The tracking hash matches the earlier prototype runs. These totals use the
+example line, not a verified doorway or entrance. Manual counting against
+documented footage remains pending; this run verifies operation, not accuracy.
+
 ## References
 
 - [PyTorch installation](https://pytorch.org/get-started/locally/)

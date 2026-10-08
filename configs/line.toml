@@ -1,0 +1,17 @@
+# Copy the inference settings from video.toml; enable optional line counting.
+model = "yolo11n.pt"
+device = "auto"
+imgsz = 640
+confidence = 0.10
+iou = 0.70
+tracker = "bytetrack.yaml"
+
+[line]
+# Normalized [x, y] coordinates. Adjust these to match your footage.
+start = [0.1, 0.75]
+end = [0.9, 0.75]
+# For this left-to-right horizontal line: in = downward, out = upward.
+positive_label = "in"
+negative_label = "out"
+hysteresis_px = 3.0
+max_gap_frames = 5

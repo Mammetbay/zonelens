@@ -4,7 +4,7 @@ Local-first video analytics for IP cameras, webcams, and video files.
 
 ZoneLens is an open-source project for detecting and tracking objects, counting line crossings, and monitoring user-defined zones. The goal is to build a practical computer vision application that runs on your own computer.
 
-> **Status: working video-file prototype.** YOLO11n person detection and ByteTrack tracking have been exercised on a real clip, including CUDA inference on Windows. The maintainer reviewed the output and considers it sufficient for the next development step. Line counting, zones, camera input, and the web interface are still planned. See [implementation status](docs/roadmap.md).
+> **Status: working video-file prototype with line counting.** YOLO11n person detection and ByteTrack tracking have been exercised on a real clip, including CUDA inference on Windows. Optional bidirectional line counting records crossing events and draws counts on the output video. Manual count validation, zones, camera input, and the web interface are still pending. See [implementation status](docs/roadmap.md).
 
 ## Planned features
 
@@ -114,12 +114,41 @@ Each output directory contains:
 
 - `annotated.mp4`: boxes, confidence, temporary IDs, and FPS overlay (without audio).
 - `tracks.jsonl`: per-frame person boxes, IDs, and video timestamps.
+- `events.jsonl`: line crossing events (empty when counting is disabled).
 - `summary.json`: actual model device, versions, timing, stop reason, and a hash
   of tracking records for comparing repeated runs.
 
 Press **Q** or **Escape** in the preview to finish early, or **Ctrl+C** in the
 terminal to interrupt. Existing output directories are never overwritten.
 Use constant frame rate footage. Camera input is not implemented yet.
+
+## Line counting
+
+Set the line endpoints in `configs/line.toml` to match your footage, then run:
+
+```powershell
+.\.venv\Scripts\zonelens.exe samples/people.mp4 --config configs/line.toml --device 0 --show --output outputs/line-run1
+```
+
+Coordinates are normalized `[x, y]` values between 0 and 1: `[0, 0]` is the
+top-left corner and `[1, 1]` the bottom-right corner. Only the segment between
+`start` and `end` counts; its extension does not. The arrow shows endpoint order.
+The sample left-to-right horizontal line counts downward crossings as `in` and
+upward crossings as `out`. These labels are configurable, and reversing the
+endpoints reverses the directions. Set labels to match the camera's actual layout.
+
+Counting follows each tracked person's box bottom-center point. A side change
+beyond `hysteresis_px` produces one event; small movements inside the band do
+not repeatedly count. A person can cross back and be counted in the other
+direction. Tracks unseen for more than `max_gap_frames` restart without a
+crossing; shorter gaps can bridge a crossing. New IDs also start fresh.
+
+`events.jsonl` records the track ID, direction, confirmation frame, video time
+in milliseconds, and bottom-center point in pixels. Confirmation can be later
+than the physical crossing because of the band. Totals appear on the video and
+in `summary.json` under `line_counts`. Omitting `[line]` disables counting.
+Counts depend on tracking continuity; ID switches and occlusion can miss or
+duplicate crossings. Compare a full run with a manual count before relying on it.
 
 ## Understanding your results
 

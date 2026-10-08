@@ -30,12 +30,19 @@ checks. Follow-up issues
 are maintained in [GPU/video acceptance #1](https://github.com/Mammetbay/zonelens/issues/1)
 and [sample footage #2](https://github.com/Mammetbay/zonelens/issues/2).
 
-## M2: line crossing (next)
+## M2: line crossing (implemented; manual validation pending)
 
-- [ ] Configure a counting line and crossing directions.
-- [ ] Count crossings using track movement without counting every frame.
-- [ ] Test direction, repeated crossings, and track loss.
+- [x] Configure a counting line and crossing directions.
+- [x] Count crossings using track movement without counting every frame.
+- [x] Test direction, repeated crossings, and track loss.
 - [ ] Compare results against a manual count on documented footage.
+
+The rule uses the tracked box bottom-center point, a finite normalized segment,
+a pixel deadband, and configurable track expiry. Crossings are written to
+`events.jsonl`; direction totals appear on the video and in `summary.json`.
+Use `configs/line.toml` as the starting configuration. Automated tests cover
+geometry, direction, jitter, loss, and output integration; these do not establish
+real-world counting accuracy.
 
 ## Later milestones
 

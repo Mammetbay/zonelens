@@ -13,6 +13,7 @@ import ultralytics
 from ultralytics import YOLO
 
 from app.vision.config import Config
+from app.vision.line_counter import LineCounter
 from app.vision.source import VideoSource
 
 
@@ -44,6 +45,7 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
     ids = set()
     digest = hashlib.sha256()
     reason = "end_of_file"
+    counter = None
     device = select_device(config.device)
     start = perf_counter()
     try:
@@ -58,7 +60,8 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
             print(f"Model device: {actual_device}; source FPS: {source.fps:.2f}")
             setup_seconds = perf_counter() - start
             processing_start = perf_counter()
-            with (output / "tracks.jsonl").open("w", encoding="utf-8") as tracks:
+            with (output / "tracks.jsonl").open("w", encoding="utf-8") as tracks, \
+                    (output / "events.jsonl").open("w", encoding="utf-8") as events:
                 for index, frame in source:
                     result = model.track(
                         frame, persist=True, tracker=config.tracker, classes=[0],
@@ -82,6 +85,12 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
                     tracked_frames += int(any(p["id"] is not None for p in people))
                     record = {"frame": index, "video_time_ms": round(index / source.fps * 1000, 3),
                               "people": people}
+                    if config.line is not None:
+                        if counter is None:
+                            height, width = frame.shape[:2]
+                            counter = LineCounter(config.line, width, height)
+                        for event in counter.update(index, record["video_time_ms"], people):
+                            events.write(json.dumps(event, sort_keys=True) + "\n")
                     line = json.dumps(record, sort_keys=True)
                     tracks.write(line + "\n")
                     digest.update(line.encode())
@@ -92,6 +101,13 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
                     overlay = f"Source {source.fps:.1f} FPS | Processing {fps:.1f} FPS"
                     cv2.putText(annotated, overlay,
                                 (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
+                    if counter is not None:
+                        start_point = tuple(round(v) for v in counter.start)
+                        end_point = tuple(round(v) for v in counter.end)
+                        cv2.arrowedLine(annotated, start_point, end_point, (0, 255, 255), 2)
+                        counts_text = " | ".join(f"{k}: {v}" for k, v in counter.counts.items())
+                        cv2.putText(annotated, counts_text, (12, 56),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
                     if writer is None:
                         height, width = annotated.shape[:2]
                         writer = cv2.VideoWriter(str(output / "annotated.mp4"),
@@ -123,6 +139,7 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
                 "setup_seconds": setup_seconds, "processing_seconds": elapsed,
                 "tracked_frames": tracked_frames, "unique_track_ids": len(ids),
                 "tracks_sha256": digest.hexdigest(), "stop_reason": reason,
+                "line_counts": dict(counter.counts) if counter is not None else None,
             }
             (output / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
             print(json.dumps(summary, indent=2))
