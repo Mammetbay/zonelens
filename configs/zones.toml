@@ -1,0 +1,13 @@
+model = "yolo11n.pt"
+device = "auto"
+imgsz = 640
+confidence = 0.10
+iou = 0.70
+tracker = "bytetrack.yaml"
+
+# Multiple [[zones]] tables are supported; each name must be unique.
+[[zones]]
+name = "waiting_area"
+vertices = [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]]
+dwell_seconds = 3.0
+max_gap_frames = 5

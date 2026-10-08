@@ -44,9 +44,22 @@ Use `configs/line.toml` as the starting configuration. Automated tests cover
 geometry, direction, jitter, loss, and output integration; these do not establish
 real-world counting accuracy.
 
+## M3: zone rules (implemented locally; manual validation pending)
+
+- [x] Configure multiple named normalized polygon zones.
+- [x] Report observed occupancy and peak occupancy per zone.
+- [x] Emit entry, exit, and one dwell event per tracked visit.
+- [x] Test boundary geometry, reentry, short gaps, track expiry, and combined rules.
+- [ ] Manually validate zone counts and dwell alerts on documented footage.
+
+Use `configs/zones.toml` for a sample zone. Per-frame counts are recorded in
+`tracks.jsonl`, events in `events.jsonl`, and zone totals in `summary.json`.
+The annotated video draws zone outlines and counts. Short missing-track gaps
+preserve timers but do not contribute to visible occupancy. Long gaps expire
+visits with an explicit track-loss exit. Tracking IDs remain temporary.
+
 ## Later milestones
 
-- [ ] Zone occupancy and dwell-time events.
 - [ ] FastAPI, SQLite event storage, and a React web interface.
 - [ ] Webcam/RTSP input and reconnection handling.
 - [ ] Parking occupancy and release packaging.

@@ -4,6 +4,9 @@
 
 # Run for full video
 .\.venv\Scripts\zonelens.exe samples\people.mp4 --config configs\video.toml --device 0 --show --output outputs\full1
+
+# Zone occupancy and dwell alerts (edit the polygon in configs/zones.toml)
+.\.venv\Scripts\zonelens.exe samples\people.mp4 --config configs\zones.toml --device 0 --show --output outputs\zones-run1
 # Line crossing counts
 
 Edit `[line]` in `configs/line.toml` to position the counting segment. Coordinates

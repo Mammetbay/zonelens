@@ -5,6 +5,34 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.vision.geometry import validate_polygon
+
+
+@dataclass(frozen=True)
+class ZoneConfig:
+    name: str
+    vertices: tuple[tuple[float, float], ...]
+    dwell_seconds: float = 5.0
+    max_gap_frames: int = 5
+
+    def __post_init__(self):
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValueError("zone.name must be a nonempty string")
+        if not isinstance(self.vertices, (list, tuple)) or len(self.vertices) < 3:
+            raise ValueError("zone.vertices must contain at least three points")
+        for point in self.vertices:
+            if (not isinstance(point, (list, tuple)) or len(point) != 2
+                    or any(type(v) not in (int, float) or not math.isfinite(v)
+                           or not 0 <= v <= 1 for v in point)):
+                raise ValueError("zone vertices must be normalized [x, y] coordinates in [0, 1]")
+        object.__setattr__(self, "vertices", tuple(tuple(p) for p in self.vertices))
+        validate_polygon(self.vertices)
+        if (type(self.dwell_seconds) not in (int, float)
+                or not math.isfinite(self.dwell_seconds) or self.dwell_seconds <= 0):
+            raise ValueError("zone.dwell_seconds must be finite and positive")
+        if type(self.max_gap_frames) is not int or self.max_gap_frames < 1:
+            raise ValueError("zone.max_gap_frames must be a positive integer")
+
 
 @dataclass(frozen=True)
 class LineConfig:
@@ -48,6 +76,7 @@ class Config:
     iou: float = 0.70
     tracker: str = "bytetrack.yaml"
     line: LineConfig | None = None
+    zones: tuple[ZoneConfig, ...] = ()
 
     def __post_init__(self):
         if isinstance(self.line, dict):
@@ -57,6 +86,18 @@ class Config:
                 raise ValueError(f"Unknown line configuration option: {exc}") from exc
         elif self.line is not None and not isinstance(self.line, LineConfig):
             raise ValueError("line must be a TOML table")
+        if not isinstance(self.zones, (list, tuple)):
+            # Keep the public configuration/CLI error contract consistent.
+            raise ValueError("zones must be an array of TOML tables")  # noqa: TRY004
+        try:
+            zones = tuple(ZoneConfig(**z) if isinstance(z, dict) else z for z in self.zones)
+        except TypeError as exc:
+            raise ValueError(f"Invalid zone configuration option: {exc}") from exc
+        if any(not isinstance(z, ZoneConfig) for z in zones):
+            raise ValueError("zones must contain zone configuration tables")
+        if len({z.name for z in zones}) != len(zones):
+            raise ValueError("zone names must be unique")
+        object.__setattr__(self, "zones", zones)
         if not isinstance(self.model, str) or not self.model.endswith(".pt"):
             raise ValueError("model must name a COCO YOLO .pt model")
         if self.device not in ("auto", "cpu", "0"):

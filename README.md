@@ -4,7 +4,7 @@ Local-first video analytics for IP cameras, webcams, and video files.
 
 ZoneLens is an open-source project for detecting and tracking objects, counting line crossings, and monitoring user-defined zones. The goal is to build a practical computer vision application that runs on your own computer.
 
-> **Status: working video-file prototype with line counting.** YOLO11n person detection and ByteTrack tracking have been exercised on a real clip, including CUDA inference on Windows. Optional bidirectional line counting records crossing events and draws counts on the output video. Manual count validation, zones, camera input, and the web interface are still pending. See [implementation status](docs/roadmap.md).
+> **Status: working video-file prototype with line and zone rules.** YOLO11n person detection and ByteTrack tracking have been exercised on a real clip, including CUDA inference on Windows. Optional rules count line crossings, report observed zone occupancy, and record dwell alerts. Manual accuracy validation, camera input, and the web interface are still pending. See [implementation status](docs/roadmap.md).
 
 ## Planned features
 
@@ -114,7 +114,7 @@ Each output directory contains:
 
 - `annotated.mp4`: boxes, confidence, temporary IDs, and FPS overlay (without audio).
 - `tracks.jsonl`: per-frame person boxes, IDs, and video timestamps.
-- `events.jsonl`: line crossing events (empty when counting is disabled).
+- `events.jsonl`: line crossings and zone entry, exit, and dwell events (empty when rules are disabled).
 - `summary.json`: actual model device, versions, timing, stop reason, and a hash
   of tracking records for comparing repeated runs.
 
@@ -151,6 +151,49 @@ Counts depend on tracking continuity; ID switches and occlusion can miss or
 duplicate crossings. Compare a full run with a manual count before relying on it.
 
 ## Understanding your results
+
+### Zone occupancy and dwell alerts
+
+Use `configs/zones.toml` to define one or more polygons:
+
+```toml
+[[zones]]
+name = "waiting_area"
+vertices = [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]]
+dwell_seconds = 3.0
+max_gap_frames = 5
+```
+
+Vertices use normalized `[x, y]` coordinates in perimeter order. Define at least
+three distinct points, omit a repeated closing point, and avoid crossing edges.
+Concave polygons are supported. Each zone needs a unique name. Multiple zones
+may overlap; a person can be counted in each independently. Add a `[line]` table
+to the same file to enable both rule types together.
+
+```powershell
+.\.venv\Scripts\zonelens.exe samples/people.mp4 --config configs/zones.toml --device 0 --show --output outputs/zones-run1
+```
+
+The box bottom-center determines membership, including polygon boundaries.
+Occupancy counts currently observed people with tracking IDs; missing detections
+are excluded immediately. Each visit emits `zone_enter`, followed by a single
+`zone_dwell` when the configured video-time threshold is reached while the person
+is observed inside. Exiting resets the timer and emits `zone_exit`.
+
+Short tracking gaps preserve the visit and include the gap in elapsed time.
+After more than `max_gap_frames`, an exit is recorded with `reason: track_lost`;
+its duration ends at the last inside observation. Returning then starts a new
+visit. An observed outside position exits with `reason: outside`. A new tracking
+ID also starts a new visit. No dwell alert is generated for an absent detection,
+and video end does not invent exits for people still inside.
+
+`tracks.jsonl` includes per-frame `zone_occupancy` when zones are enabled.
+`summary.json` reports final occupancy, peak occupancy, entries, exits, and dwell
+event counts per zone. The video draws polygon outlines, occupancy, and dwell
+totals. These are observed tracking results, not guaranteed room occupancy or
+unique-person counts. Manual validation remains necessary.
+
+### Detection and tracking output
 
 OpenCV decodes each video frame, YOLO finds person boxes, and ByteTrack matches
 detections across frames to assign temporary IDs. This runs a pretrained model;

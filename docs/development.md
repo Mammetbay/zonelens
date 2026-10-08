@@ -129,6 +129,31 @@ The tracking hash matches the earlier prototype runs. These totals use the
 example line, not a verified doorway or entrance. Manual counting against
 documented footage remains pending; this run verifies operation, not accuracy.
 
+## Zone rules validation: 2026-10-08
+
+The next local milestone adds `geometry.py` for simple-polygon validation and
+boundary-inclusive membership, plus `zone_monitor.py` for observed occupancy
+and per-visit entry, exit, and dwell events. Configuration accepts multiple
+unique named zones, and the pipeline combines zone and line rules when both
+are enabled. Sample settings are in `configs/zones.toml`.
+
+Automated validation: **67 tests pass**, and Ruff passes. Cases cover concave
+polygons in both vertex orders, boundaries, malformed/self-intersecting polygons,
+independent overlapping zones, untracked detections, exact dwell thresholds,
+single-alert behavior, reentry, missing detections, expiry, and all four
+line/zone enablement combinations in the video output integration test.
+
+A full CUDA run on the existing 414-frame clip completed to EOF, with local
+output at `outputs/zones-m3-20261008`. For the example `waiting_area` polygon and
+3-second threshold: final observed occupancy **1**, peak occupancy **6**,
+**35** tracked entries, **34** exits, and **4** dwell events. Throughput was
+56.78 processing FPS with 6.57 ms mean inference. These are sample rule outputs,
+not manually verified accuracy measurements or distinct-person counts.
+
+When zones are enabled, the tracking hash includes the new per-frame occupancy
+field and cannot be directly compared with older detection-only record hashes.
+No source footage or generated output is included in commits.
+
 ## References
 
 - [PyTorch installation](https://pytorch.org/get-started/locally/)

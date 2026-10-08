@@ -15,6 +15,7 @@ from ultralytics import YOLO
 from app.vision.config import Config
 from app.vision.line_counter import LineCounter
 from app.vision.source import VideoSource
+from app.vision.zone_monitor import ZoneMonitor
 
 
 def select_device(requested: str) -> str:
@@ -46,6 +47,7 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
     digest = hashlib.sha256()
     reason = "end_of_file"
     counter = None
+    zones = []
     device = select_device(config.device)
     start = perf_counter()
     try:
@@ -85,6 +87,14 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
                     tracked_frames += int(any(p["id"] is not None for p in people))
                     record = {"frame": index, "video_time_ms": round(index / source.fps * 1000, 3),
                               "people": people}
+                    if config.zones:
+                        if not zones:
+                            height, width = frame.shape[:2]
+                            zones = [ZoneMonitor(z, width, height) for z in config.zones]
+                        for zone in zones:
+                            for event in zone.update(index, record["video_time_ms"], people):
+                                events.write(json.dumps(event, sort_keys=True) + "\n")
+                        record["zone_occupancy"] = {z.config.name: z.stats["occupancy"] for z in zones}
                     if config.line is not None:
                         if counter is None:
                             height, width = frame.shape[:2]
@@ -108,6 +118,13 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
                         counts_text = " | ".join(f"{k}: {v}" for k, v in counter.counts.items())
                         cv2.putText(annotated, counts_text, (12, 56),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2)
+                    for zone_index, zone in enumerate(zones):
+                        vertices = np.array(zone.vertices).round().astype(np.int32)
+                        cv2.polylines(annotated, [vertices], True, (0, 255, 0), 2)
+                        zone_text = (f"{zone.config.name}: {zone.stats['occupancy']} | "
+                                     f"Dwell: {zone.stats['dwell_events']}")
+                        cv2.putText(annotated, zone_text, (12, 84 + zone_index * 28),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
                     if writer is None:
                         height, width = annotated.shape[:2]
                         writer = cv2.VideoWriter(str(output / "annotated.mp4"),
@@ -140,6 +157,7 @@ def run(source_path: Path, config: Config, output: Path, show=False, max_frames=
                 "tracked_frames": tracked_frames, "unique_track_ids": len(ids),
                 "tracks_sha256": digest.hexdigest(), "stop_reason": reason,
                 "line_counts": dict(counter.counts) if counter is not None else None,
+                "zones": {z.config.name: dict(z.stats) for z in zones},
             }
             (output / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
             print(json.dumps(summary, indent=2))
