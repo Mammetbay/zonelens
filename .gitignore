@@ -237,3 +237,10 @@ __marimo__/
 outputs/
 models/
 .local/
+
+# Local DB & Frontend
+*.db
+*.sqlite3
+node_modules/
+frontend/node_modules/
+frontend/dist/

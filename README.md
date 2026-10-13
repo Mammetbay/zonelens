@@ -39,8 +39,8 @@ The initial development target is Windows 11. The prototype uses a small pretrai
 ## Roadmap
 
 - [x] **First prototype:** detect and track people in a video file.
-- [ ] **Line counting:** count crossings and compare results with manual counts.
-- [ ] **Web interface:** draw lines and zones, view live results, and browse events.
+- [x] **Line counting & Zone rules:** count crossings, monitor polygon occupancy and dwell alerts.
+- [x] **Web interface:** draw lines and zones interactively, view live MJPEG stream, and browse SQLite events.
 - [ ] **Camera support:** connect an RTSP camera and handle stream interruptions.
 - [ ] **Parking analysis:** estimate occupancy of manually defined parking spaces.
 - [ ] **First release:** provide setup instructions, sample videos, tests, and benchmarks.

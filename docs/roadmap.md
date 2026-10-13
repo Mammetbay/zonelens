@@ -60,6 +60,6 @@ visits with an explicit track-loss exit. Tracking IDs remain temporary.
 
 ## Later milestones
 
-- [ ] FastAPI, SQLite event storage, and a React web interface.
+- [x] FastAPI, SQLite event storage, and a React web interface.
 - [ ] Webcam/RTSP input and reconnection handling.
 - [ ] Parking occupancy and release packaging.

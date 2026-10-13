@@ -6,6 +6,17 @@ from pathlib import Path
 
 
 def main():
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "serve":
+        serve_parser = argparse.ArgumentParser(description="ZoneLens Web Server")
+        serve_parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
+        serve_parser.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+        serve_args = serve_parser.parse_args(sys.argv[2:])
+        import uvicorn
+        print(f"Starting ZoneLens Web Server at http://{serve_args.host}:{serve_args.port}")
+        uvicorn.run("app.main:app", host=serve_args.host, port=serve_args.port, reload=False)
+        return
+
     parser = argparse.ArgumentParser(description="ZoneLens video-file prototype")
     parser.add_argument("source", type=Path, help="Local video file")
     parser.add_argument("--read-only", action="store_true", help="Decode without loading a model")
