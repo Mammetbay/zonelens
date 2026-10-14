@@ -74,14 +74,20 @@ async def lifespan(app: FastAPI):
             return
         l.default_exception_handler(context)
     loop.set_exception_handler(custom_handler)
-    manager.set_loop(loop)
+    routes.async_loop = loop
 
-    # Register callbacks
+    # Register callbacks for WebSocket and SSE
     worker.register_event_callback(
-        lambda ev: manager.broadcast_from_thread({"type": "event", "data": ev})
+        lambda ev: (
+            manager.broadcast_from_thread({"type": "event", "data": ev}),
+            routes.broadcast_sse({"type": "event", "data": ev}),
+        )
     )
     worker.register_telemetry_callback(
-        lambda tel: manager.broadcast_from_thread({"type": "telemetry", "data": tel})
+        lambda tel: (
+            manager.broadcast_from_thread({"type": "telemetry", "data": tel}),
+            routes.broadcast_sse({"type": "telemetry", "data": tel}),
+        )
     )
 
     # Auto-start with sample video if available

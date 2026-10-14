@@ -37,10 +37,11 @@ export const App: React.FC = () => {
     ],
   });
 
+  const [savedRulesSnapshot, setSavedRulesSnapshot] = useState<string>('');
   const [events, setEvents] = useState<AnalyticsEvent[]>([]);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
 
-  // Fetch initial health and rules from API
+  // Fetch initial health, rules, and events from API
   useEffect(() => {
     fetch('/api/health')
       .then((res) => res.json())
@@ -51,10 +52,12 @@ export const App: React.FC = () => {
       .then((res) => res.json())
       .then((data) => {
         if (data && (data.line || data.zones)) {
-          setRules({
+          const loadedRules: RulesData = {
             line: data.line,
             zones: data.zones || [],
-          });
+          };
+          setRules(loadedRules);
+          setSavedRulesSnapshot(JSON.stringify(loadedRules));
         }
       })
       .catch((err) => console.error('Rules fetch failed:', err));
@@ -69,51 +72,80 @@ export const App: React.FC = () => {
       .catch((err) => console.error('Events fetch failed:', err));
   }, []);
 
-  // Polling fallback for guaranteed zero-dependency real-time telemetry
+  // Real-time telemetry and instant events via Server-Sent Events (SSE)
+  // Works with standard HTTP, zero external websocket dependencies required on server
+  useEffect(() => {
+    let es: EventSource | null = null;
+    let isSubscribed = true;
+
+    const setupSSE = () => {
+      try {
+        es = new EventSource('/api/events/stream');
+
+        es.onopen = () => {
+          if (isSubscribed) setWsConnected(true);
+        };
+
+        es.onmessage = (msgEvent) => {
+          if (!isSubscribed) return;
+          try {
+            const msg = JSON.parse(msgEvent.data);
+            if (msg.type === 'telemetry') {
+              setTelemetry(msg.data);
+              setWsConnected(true);
+            } else if (msg.type === 'event') {
+              // Instant event delivery from vision worker
+              setEvents((prev) => {
+                const incoming = msg.data;
+                if (prev.some((e) => e.event_id === incoming.event_id)) {
+                  return prev;
+                }
+                return [incoming, ...prev].slice(0, 500);
+              });
+            }
+          } catch {
+            // Ignore non-json messages
+          }
+        };
+
+        es.onerror = () => {
+          if (isSubscribed) setWsConnected(false);
+        };
+      } catch (err) {
+        console.warn('SSE connection error:', err);
+        if (isSubscribed) setWsConnected(false);
+      }
+    };
+
+    setupSSE();
+
+    return () => {
+      isSubscribed = false;
+      if (es) {
+        es.close();
+      }
+    };
+  }, []);
+
+  // Fallback status polling if real-time stream is offline
   useEffect(() => {
     const pollStatus = () => {
+      if (wsConnected) {
+        return; // Stream is active, no need to poll
+      }
       fetch('/api/status')
         .then((res) => res.json())
         .then((data) => {
           if (data && data.status) {
             setTelemetry(data);
-            setWsConnected(true);
           }
         })
-        .catch(() => setWsConnected(false));
+        .catch(() => {});
     };
 
-    pollStatus();
-    const interval = setInterval(pollStatus, 400);
+    const interval = setInterval(pollStatus, 1000);
     return () => clearInterval(interval);
-  }, []);
-
-  // Server-Sent Events (SSE) for instant event alerts and telemetry
-  useEffect(() => {
-    let es: EventSource | null = null;
-    try {
-      es = new EventSource('/api/events/stream');
-      es.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'telemetry') {
-            setTelemetry(msg.data);
-            setWsConnected(true);
-          } else if (msg.type === 'event') {
-            setEvents((prev) => [msg.data, ...prev].slice(0, 500));
-          }
-        } catch (e) {
-          // ignore parse errors
-        }
-      };
-    } catch (e) {
-      // ignore
-    }
-
-    return () => {
-      if (es) es.close();
-    };
-  }, []);
+  }, [wsConnected]);
 
   // REST API Actions
   const handleStart = async (source: string, loop: boolean, device: string) => {
@@ -171,6 +203,7 @@ export const App: React.FC = () => {
         const data = await res.json();
         if (data.rules) {
           setRules(data.rules);
+          setSavedRulesSnapshot(JSON.stringify(data.rules));
         }
       }
     } catch (err) {
@@ -188,29 +221,23 @@ export const App: React.FC = () => {
   };
 
   const isRunning = telemetry?.status === 'running' || telemetry?.status === 'paused';
+  const hasUnsavedRules = JSON.stringify(rules) !== savedRulesSnapshot;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="app-container">
       {/* Top Header */}
       <Header telemetry={telemetry} wsConnected={wsConnected} health={health} />
 
       {/* Main Workspace Dashboard */}
-      <main
-        style={{
-          flex: 1,
-          padding: '0 16px 16px 16px',
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.65fr) minmax(360px, 1fr)',
-          gap: '16px',
-        }}
-      >
+      <main className="dashboard-layout">
         {/* Left: Video Viewport & Controls */}
-        <section style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <section className="viewport-section">
           <VideoPlayer
             rules={rules}
             onUpdateRules={setRules}
             onSaveRules={handleSaveRules}
             isRunning={isRunning}
+            hasUnsavedRules={hasUnsavedRules}
           />
           <ControlsBar
             telemetry={telemetry}
@@ -223,7 +250,7 @@ export const App: React.FC = () => {
         </section>
 
         {/* Right: Live Analytics & HUD Panel */}
-        <section>
+        <section className="analytics-section">
           <AnalyticsPanel
             telemetry={telemetry}
             rules={rules}
@@ -231,22 +258,13 @@ export const App: React.FC = () => {
             onSaveRules={handleSaveRules}
             events={events}
             onClearEvents={handleClearEvents}
+            hasUnsavedRules={hasUnsavedRules}
           />
         </section>
       </main>
 
       {/* Footer bar */}
-      <footer
-        style={{
-          padding: '8px 20px',
-          borderTop: '1px solid var(--border-subtle)',
-          fontSize: '11px',
-          color: 'var(--text-dim)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
+      <footer className="footer-bar">
         <span>ZoneLens — Local-first Computer Vision Intelligence</span>
         <span>AGPL-3.0 License • Powered by YOLO11n & ByteTrack</span>
       </footer>

@@ -67,6 +67,51 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* Layout */
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-layout {
+  flex: 1;
+  padding: 0 16px 16px 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(360px, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1080px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+.viewport-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.analytics-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.footer-bar {
+  padding: 8px 20px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.2);
+}
+
 /* Glass panel */
 .glass-panel {
   background: var(--bg-card);
@@ -123,6 +168,7 @@ body {
   border: 1px solid transparent;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
 }
 
 .btn-primary {

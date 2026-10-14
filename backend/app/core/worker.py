@@ -3,6 +3,7 @@ and real-time line/zone rule evaluation with MJPEG streaming and telemetry broad
 """
 
 import math
+import queue
 import threading
 import time
 from dataclasses import asdict
@@ -31,6 +32,13 @@ class VisionWorker:
         self.stop_event = threading.Event()
         self.pause_event = threading.Event()
 
+        # Asynchronous DB event recording queue to prevent disk I/O stuttering
+        self._db_event_queue: queue.Queue = queue.Queue(maxsize=2000)
+        self._db_thread = threading.Thread(
+            target=self._db_writer_worker, daemon=True, name="DBWriterThread"
+        )
+        self._db_thread.start()
+
         # State fields
         self.status: str = "stopped"  # stopped, running, paused, completed, error
         self.source_path: str = "samples/people.mp4"
@@ -56,6 +64,22 @@ class VisionWorker:
         self.event_callbacks: list[Callable[[dict[str, Any]], None]] = []
         self.telemetry_callbacks: list[Callable[[dict[str, Any]], None]] = []
 
+    def _db_writer_worker(self):
+        """Background worker thread draining events to SQLite without blocking the vision loop."""
+        while True:
+            try:
+                event = self._db_event_queue.get()
+                if event is None:
+                    break
+                try:
+                    record_event(event)
+                except Exception as exc:
+                    print(f"Warning: failed to record event to database: {exc}")
+                finally:
+                    self._db_event_queue.task_done()
+            except Exception:
+                pass
+
     def register_event_callback(self, cb: Callable[[dict[str, Any]], None]):
         self.event_callbacks.append(cb)
 
@@ -63,13 +87,13 @@ class VisionWorker:
         self.telemetry_callbacks.append(cb)
 
     def emit_event(self, event: dict[str, Any]):
-        # Record to SQLite database
+        # Non-blocking SQLite persistence via background queue
         try:
-            record_event(event)
-        except Exception as exc:
-            print(f"Warning: failed to record event to database: {exc}")
+            self._db_event_queue.put_nowait(event)
+        except queue.Full:
+            pass
 
-        # Broadcast via callbacks
+        # Broadcast via callbacks (non-blocking)
         for cb in list(self.event_callbacks):
             try:
                 cb(event)
@@ -251,6 +275,8 @@ class VisionWorker:
             total_inference_ms = 0.0
 
             while not self.stop_event.is_set():
+                frame_start = time.perf_counter()
+
                 if self.pause_event.is_set():
                     time.sleep(0.05)
                     continue
@@ -382,8 +408,16 @@ class VisionWorker:
                     2,
                 )
 
-                # Encode JPEG
-                _, jpeg_buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                # Encode JPEG efficiently for web streaming
+                if width > 1280:
+                    scale = 1280.0 / width
+                    stream_frame = cv2.resize(
+                        annotated, (1280, int(height * scale)), interpolation=cv2.INTER_LINEAR
+                    )
+                else:
+                    stream_frame = annotated
+
+                _, jpeg_buf = cv2.imencode(".jpg", stream_frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
                 jpeg_bytes = jpeg_buf.tobytes()
 
                 # Update state under lock
@@ -398,15 +432,15 @@ class VisionWorker:
                     self.latest_frame_time = time.time()
                     self.frame_condition.notify_all()
 
-                # Periodic telemetry emit (every 10 frames)
+                # Periodic telemetry emit (every 5 frames)
                 if frame_count % 5 == 0:
                     self.emit_telemetry()
 
-                # Slight yield to avoid saturated core when processing faster than video fps
+                # Accurate frame timing to reach full video fps without stutter
                 target_frame_time = 1.0 / fps
-                actual_spent = infer_ms / 1000.0
-                if actual_spent < target_frame_time:
-                    time.sleep(target_frame_time - actual_spent)
+                frame_elapsed = time.perf_counter() - frame_start
+                if frame_elapsed < target_frame_time:
+                    time.sleep(target_frame_time - frame_elapsed)
 
         except Exception as exc:
             with self.lock:

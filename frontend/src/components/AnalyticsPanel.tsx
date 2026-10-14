@@ -7,9 +7,13 @@ import {
   ArrowDownRight,
   Users,
   Trash2,
-  Download,
+  Search,
+  FileSpreadsheet,
+  FileCode,
+  AlertTriangle,
 } from 'lucide-react';
 import type { Telemetry, RulesData, AnalyticsEvent } from '../types';
+import { formatEventTimestamp, exportEventsToCSV, exportEventsToJSON } from '../utils/export';
 
 interface AnalyticsPanelProps {
   telemetry: Telemetry | null;
@@ -18,6 +22,7 @@ interface AnalyticsPanelProps {
   onSaveRules: (rules: RulesData) => void;
   events: AnalyticsEvent[];
   onClearEvents: () => void;
+  hasUnsavedRules?: boolean;
 }
 
 export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
@@ -27,25 +32,27 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
   onSaveRules,
   events,
   onClearEvents,
+  hasUnsavedRules,
 }) => {
   const [activeTab, setActiveTab] = useState<'analytics' | 'rules' | 'events'>('analytics');
   const [eventFilter, setEventFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Filtered events
+  // Filtered and searched events
   const filteredEvents = events.filter((ev) => {
-    if (eventFilter === 'all') return true;
-    return ev.event_type === eventFilter;
+    if (eventFilter !== 'all' && ev.event_type !== eventFilter) {
+      return false;
+    }
+    if (searchQuery.trim() !== '') {
+      const q = searchQuery.toLowerCase().trim();
+      const matchTrack = ev.track_id !== null && ev.track_id !== undefined && ev.track_id.toString().includes(q);
+      const matchRule = ev.rule_name && ev.rule_name.toLowerCase().includes(q);
+      const matchType = ev.event_type && ev.event_type.toLowerCase().includes(q);
+      const matchDir = ev.direction && ev.direction.toLowerCase().includes(q);
+      return matchTrack || matchRule || matchType || matchDir;
+    }
+    return true;
   });
-
-  const exportEventsJson = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(events, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `zonelens-events-${Date.now()}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-  };
 
   const lineCounts = telemetry?.line_counts || {};
   const positiveLabel = rules.line?.positive_label || 'in';
@@ -60,7 +67,13 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)' }}>
         <button
           className={`btn ${activeTab === 'analytics' ? 'btn-active' : 'btn-secondary'}`}
-          style={{ flex: 1, borderRadius: 0, border: 'none', borderBottom: activeTab === 'analytics' ? '2px solid var(--accent-emerald)' : 'none', padding: '12px 10px' }}
+          style={{
+            flex: 1,
+            borderRadius: 0,
+            border: 'none',
+            borderBottom: activeTab === 'analytics' ? '2px solid var(--accent-emerald)' : 'none',
+            padding: '12px 10px',
+          }}
           onClick={() => setActiveTab('analytics')}
         >
           <Activity size={15} color={activeTab === 'analytics' ? '#10B981' : undefined} />
@@ -69,16 +82,43 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
 
         <button
           className={`btn ${activeTab === 'rules' ? 'btn-active' : 'btn-secondary'}`}
-          style={{ flex: 1, borderRadius: 0, border: 'none', borderBottom: activeTab === 'rules' ? '2px solid var(--accent-violet)' : 'none', padding: '12px 10px' }}
+          style={{
+            flex: 1,
+            borderRadius: 0,
+            border: 'none',
+            borderBottom: activeTab === 'rules' ? '2px solid var(--accent-violet)' : 'none',
+            padding: '12px 10px',
+            position: 'relative',
+          }}
           onClick={() => setActiveTab('rules')}
         >
           <Sliders size={15} color={activeTab === 'rules' ? '#8B5CF6' : undefined} />
           <span>Rules</span>
+          {hasUnsavedRules && (
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: '#F59E0B',
+                position: 'absolute',
+                top: '10px',
+                right: '12px',
+              }}
+              title="Unsaved changes"
+            />
+          )}
         </button>
 
         <button
           className={`btn ${activeTab === 'events' ? 'btn-active' : 'btn-secondary'}`}
-          style={{ flex: 1, borderRadius: 0, border: 'none', borderBottom: activeTab === 'events' ? '2px solid var(--accent-cyan)' : 'none', padding: '12px 10px' }}
+          style={{
+            flex: 1,
+            borderRadius: 0,
+            border: 'none',
+            borderBottom: activeTab === 'events' ? '2px solid var(--accent-cyan)' : 'none',
+            padding: '12px 10px',
+          }}
           onClick={() => setActiveTab('events')}
         >
           <BellRing size={15} color={activeTab === 'events' ? '#06B6D4' : undefined} />
@@ -90,7 +130,14 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
       {activeTab === 'analytics' && (
         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
           {/* Bidirectional Line Crossing Card */}
-          <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-md)', padding: '14px', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
+          <div
+            style={{
+              background: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px',
+              border: '1px solid rgba(139, 92, 246, 0.25)',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span className="badge badge-violet">Line Crossing</span>
@@ -104,8 +151,27 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-              <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', borderRadius: 'var(--radius-sm)', padding: '10px', textAlign: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '11px', color: '#34D399', fontWeight: 600, textTransform: 'uppercase' }}>
+              <div
+                style={{
+                  background: 'rgba(16, 185, 129, 0.08)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '10px',
+                  textAlign: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    fontSize: '11px',
+                    color: '#34D399',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                  }}
+                >
                   <ArrowDownRight size={13} />
                   <span>{positiveLabel}</span>
                 </div>
@@ -114,8 +180,27 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                 </div>
               </div>
 
-              <div style={{ background: 'rgba(244, 63, 94, 0.08)', border: '1px solid rgba(244, 63, 94, 0.25)', borderRadius: 'var(--radius-sm)', padding: '10px', textAlign: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '11px', color: '#FDA4AF', fontWeight: 600, textTransform: 'uppercase' }}>
+              <div
+                style={{
+                  background: 'rgba(244, 63, 94, 0.08)',
+                  border: '1px solid rgba(244, 63, 94, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '10px',
+                  textAlign: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    fontSize: '11px',
+                    color: '#FDA4AF',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                  }}
+                >
                   <ArrowUpRight size={13} />
                   <span>{negativeLabel}</span>
                 </div>
@@ -124,11 +209,27 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                 </div>
               </div>
 
-              <div style={{ background: 'rgba(255, 255, 255, 0.04)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '10px', textAlign: 'center' }}>
+              <div
+                style={{
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '10px',
+                  textAlign: 'center',
+                }}
+              >
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
                   Net Flow
                 </div>
-                <div style={{ fontSize: '24px', fontWeight: 800, fontFamily: 'var(--font-mono)', color: netCount >= 0 ? '#38BDF8' : '#F59E0B', marginTop: '4px' }}>
+                <div
+                  style={{
+                    fontSize: '24px',
+                    fontWeight: 800,
+                    fontFamily: 'var(--font-mono)',
+                    color: netCount >= 0 ? '#38BDF8' : '#F59E0B',
+                    marginTop: '4px',
+                  }}
+                >
                   {netCount >= 0 ? `+${netCount}` : netCount}
                 </div>
               </div>
@@ -145,7 +246,17 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
             </div>
 
             {rules.zones.length === 0 ? (
-              <div style={{ padding: '16px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--border-subtle)', color: 'var(--text-dim)', fontSize: '12px' }}>
+              <div
+                style={{
+                  padding: '16px',
+                  textAlign: 'center',
+                  background: 'rgba(255,255,255,0.02)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px dashed var(--border-subtle)',
+                  color: 'var(--text-dim)',
+                  fontSize: '12px',
+                }}
+              >
                 No zones drawn yet. Click "Draw Zone" above the video to define areas.
               </div>
             ) : (
@@ -168,9 +279,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                           Dwell: {z.dwell_seconds}s
                         </span>
                       </div>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {z.vertices.length} vertices
-                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{z.vertices.length} vertices</span>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', textAlign: 'center' }}>
@@ -200,15 +309,21 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
           </div>
 
           {/* Active Detected People in Scene */}
-          <div style={{ marginTop: 'auto', background: 'rgba(255,255,255,0.02)', borderRadius: 'var(--radius-md)', padding: '12px', border: '1px solid var(--border-subtle)' }}>
+          <div
+            style={{
+              marginTop: 'auto',
+              background: 'rgba(255,255,255,0.02)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Users size={14} color="var(--accent-cyan)" />
                 <span style={{ fontSize: '12px', fontWeight: 700 }}>Active Tracked Persons</span>
               </div>
-              <span className="badge badge-cyan">
-                {telemetry?.active_people_count || 0} Visible
-              </span>
+              <span className="badge badge-cyan">{telemetry?.active_people_count || 0} Visible</span>
             </div>
 
             {telemetry?.tracks && telemetry.tracks.length > 0 ? (
@@ -245,8 +360,34 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
       {/* Tab 2: Rules Configuration */}
       {activeTab === 'rules' && (
         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', overflowY: 'auto' }}>
+          {hasUnsavedRules && (
+            <div
+              style={{
+                background: 'rgba(245, 158, 11, 0.1)',
+                border: '1px solid rgba(245, 158, 11, 0.3)',
+                borderRadius: 'var(--radius-sm)',
+                padding: '8px 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontSize: '12px',
+                color: '#FBBF24',
+              }}
+            >
+              <AlertTriangle size={15} />
+              <span>You have unsaved changes. Click "Apply & Save Rules" below.</span>
+            </div>
+          )}
+
           {/* Line rule settings */}
-          <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', padding: '14px', border: '1px solid var(--border-subtle)' }}>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
             <span style={{ fontSize: '13px', fontWeight: 700, display: 'block', marginBottom: '10px' }}>
               Counting Line Settings
             </span>
@@ -338,7 +479,14 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
           </div>
 
           {/* Zones rule settings */}
-          <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 'var(--radius-md)', padding: '14px', border: '1px solid var(--border-subtle)' }}>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.03)',
+              borderRadius: 'var(--radius-md)',
+              padding: '14px',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
             <span style={{ fontSize: '13px', fontWeight: 700, display: 'block', marginBottom: '10px' }}>
               Polygon Zones Settings
             </span>
@@ -418,48 +566,71 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
           </div>
 
           <button
-            className="btn btn-primary"
+            className={`btn ${hasUnsavedRules ? 'btn-primary' : 'btn-secondary'}`}
             style={{ width: '100%', marginTop: 'auto' }}
             onClick={() => onSaveRules(rules)}
           >
-            Apply & Save Rules to Backend
+            {hasUnsavedRules ? 'Apply & Save Rules *' : 'Rules are up to date'}
           </button>
         </div>
       )}
 
-      {/* Tab 3: Events History & Live Stream */}
+      {/* Tab 3: Events History & Search */}
       {activeTab === 'events' && (
         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }}>
           {/* Action and Filter Ribbon */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
-            <select
-              className="input-text"
-              style={{ padding: '4px 8px', fontSize: '12px', width: '130px' }}
-              value={eventFilter}
-              onChange={(e) => setEventFilter(e.target.value)}
-            >
-              <option value="all">All Events</option>
-              <option value="line_crossing">Line Crossing</option>
-              <option value="zone_entry">Zone Entry</option>
-              <option value="zone_exit">Zone Exit</option>
-              <option value="zone_dwell">Dwell Alert</option>
-            </select>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: '1 1 200px' }}>
+              <select
+                className="input-text"
+                style={{ padding: '6px 8px', fontSize: '12px', width: '120px' }}
+                value={eventFilter}
+                onChange={(e) => setEventFilter(e.target.value)}
+              >
+                <option value="all">All Types</option>
+                <option value="line_crossing">Line Crossing</option>
+                <option value="zone_entry">Zone Entry</option>
+                <option value="zone_exit">Zone Exit</option>
+                <option value="zone_dwell">Dwell Alert</option>
+              </select>
+
+              <div style={{ position: 'relative', flex: 1 }}>
+                <input
+                  type="text"
+                  className="input-text"
+                  placeholder="Search ID or zone..."
+                  style={{ width: '100%', paddingLeft: '28px', fontSize: '12px' }}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <Search size={13} color="var(--text-dim)" style={{ position: 'absolute', left: '8px', top: '9px' }} />
+              </div>
+            </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <button
                 className="btn btn-secondary"
-                style={{ padding: '5px 8px', fontSize: '11px' }}
-                onClick={exportEventsJson}
-                title="Download events as JSON"
+                style={{ padding: '6px 10px', fontSize: '11px' }}
+                onClick={() => exportEventsToCSV(filteredEvents)}
+                title="Download filtered events as CSV"
               >
-                <Download size={13} />
-                <span>Export</span>
+                <FileSpreadsheet size={13} color="#34D399" />
+                <span>CSV</span>
               </button>
               <button
                 className="btn btn-secondary"
-                style={{ padding: '5px 8px', fontSize: '11px' }}
+                style={{ padding: '6px 10px', fontSize: '11px' }}
+                onClick={() => exportEventsToJSON(filteredEvents)}
+                title="Download filtered events as JSON"
+              >
+                <FileCode size={13} color="#38BDF8" />
+                <span>JSON</span>
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '6px 10px', fontSize: '11px' }}
                 onClick={onClearEvents}
-                title="Clear all events from SQLite"
+                title="Clear all events from SQLite database"
               >
                 <Trash2 size={13} color="#FDA4AF" />
                 <span>Clear</span>
@@ -471,7 +642,9 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '2px' }}>
             {filteredEvents.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--text-dim)', fontSize: '12px' }}>
-                No events recorded yet. Movements across lines or zones will appear here automatically.
+                {searchQuery || eventFilter !== 'all'
+                  ? 'No events match the current filter/search.'
+                  : 'No events recorded yet. Movements across lines or zones will appear here in real time.'}
               </div>
             ) : (
               filteredEvents.map((ev, idx) => {
@@ -481,7 +654,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
 
                 return (
                   <div
-                    key={ev.id || idx}
+                    key={ev.id || ev.event_id || idx}
                     style={{
                       background: isDwell
                         ? 'rgba(245, 158, 11, 0.08)'
@@ -490,7 +663,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                         : 'rgba(255, 255, 255, 0.03)',
                       border: `1px solid ${
                         isDwell
-                          ? 'rgba(245, 158, 11, 0.3)'
+                          ? 'rgba(245, 158, 11, 0.35)'
                           : isLine
                           ? 'rgba(139, 92, 246, 0.25)'
                           : 'var(--border-subtle)'
@@ -510,22 +683,26 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({
                         ) : (
                           <span className="badge badge-cyan">Zone Exit</span>
                         )}
-                        <span style={{ fontSize: '12px', fontWeight: 600 }}>
-                          {ev.rule_name || ev.direction || 'Event'}
-                        </span>
+                        <span style={{ fontSize: '12px', fontWeight: 600 }}>{ev.rule_name || ev.direction || 'Event'}</span>
                       </div>
                       <span style={{ fontSize: '10px', fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>
-                        {ev.created_at ? new Date(ev.created_at).toLocaleTimeString() : `${(ev.video_time_ms / 1000).toFixed(1)}s`}
+                        {formatEventTimestamp(ev.created_at, ev.video_time_ms)}
                       </span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
-                      <span>Track ID: <strong style={{ color: 'var(--text-main)' }}>#{ev.track_id ?? '?'}</strong></span>
+                      <span>
+                        Track ID: <strong style={{ color: 'var(--text-main)' }}>#{ev.track_id ?? '?'}</strong>
+                      </span>
                       {ev.direction && (
-                        <span>Direction: <strong style={{ color: '#C4B5FD' }}>{ev.direction}</strong></span>
+                        <span>
+                          Direction: <strong style={{ color: '#C4B5FD' }}>{ev.direction}</strong>
+                        </span>
                       )}
                       {ev.observed_duration !== undefined && ev.observed_duration !== null && (
-                        <span>Dwell: <strong style={{ color: '#FBBF24' }}>{ev.observed_duration.toFixed(1)}s</strong></span>
+                        <span>
+                          Dwell: <strong style={{ color: '#FBBF24' }}>{ev.observed_duration.toFixed(1)}s</strong>
+                        </span>
                       )}
                     </div>
                   </div>

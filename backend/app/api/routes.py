@@ -202,22 +202,40 @@ def get_preview():
     )
 
 
+sse_subscribers: list[asyncio.Queue] = []
+async_loop: asyncio.AbstractEventLoop | None = None
+
+
+def broadcast_sse(msg: dict[str, Any]):
+    global async_loop
+    if async_loop is not None and async_loop.is_running():
+        for q in list(sse_subscribers):
+            try:
+                async_loop.call_soon_threadsafe(q.put_nowait, msg)
+            except Exception:
+                pass
+
+
 @router.get("/events/stream")
 async def sse_events_stream():
-    """Server-Sent Events fallback for real-time telemetry and events without requiring websockets package."""
+    """Server-Sent Events for real-time telemetry and events without requiring websockets package."""
     import json
     w = get_worker()
+    q: asyncio.Queue = asyncio.Queue(maxsize=200)
+    sse_subscribers.append(q)
 
     async def sse_generator():
-        initial_msg = json.dumps({"type": "telemetry", "data": w.get_status()})
-        yield f"data: {initial_msg}\n\n"
-        last_frame = -1
-        while True:
-            await asyncio.sleep(0.2)
-            status = w.get_status()
-            if status["frame_index"] != last_frame:
-                last_frame = status["frame_index"]
-                yield f"data: {json.dumps({'type': 'telemetry', 'data': status})}\n\n"
+        try:
+            initial_msg = json.dumps({"type": "telemetry", "data": w.get_status()})
+            yield f"data: {initial_msg}\n\n"
+            while True:
+                msg = await q.get()
+                yield f"data: {json.dumps(msg)}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if q in sse_subscribers:
+                sse_subscribers.remove(q)
 
     return StreamingResponse(
         sse_generator(),
