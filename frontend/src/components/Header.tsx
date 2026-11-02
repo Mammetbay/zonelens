@@ -12,6 +12,7 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected, health }
   const isRunning = telemetry?.status === 'running';
   const isPaused = telemetry?.status === 'paused';
   const isError = telemetry?.status === 'error';
+  const isReconnecting = telemetry?.status === 'reconnecting';
 
   return (
     <header className="glass-panel" style={{ padding: '12px 20px', margin: '16px 16px 12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
@@ -71,9 +72,26 @@ export const Header: React.FC<HeaderProps> = ({ telemetry, wsConnected, health }
         )}
 
         {/* Status indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
-          <div className={`live-dot ${isRunning ? '' : isPaused ? 'idle' : isError ? 'error' : 'idle'}`} />
-          <span style={{ fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '6px 12px',
+          background: isReconnecting ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.04)',
+          borderRadius: 'var(--radius-sm)',
+          border: `1px solid ${isReconnecting ? '#F59E0B' : 'var(--border-subtle)'}`,
+        }}>
+          <div
+            className={`live-dot ${isRunning ? '' : isReconnecting ? 'idle' : isPaused ? 'idle' : isError ? 'error' : 'idle'}`}
+            style={isReconnecting ? { backgroundColor: '#F59E0B', boxShadow: '0 0 10px #F59E0B' } : undefined}
+          />
+          <span style={{
+            fontSize: '12px',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+            color: isReconnecting ? '#F59E0B' : undefined,
+          }}>
             {telemetry?.status || 'STOPPED'}
           </span>
         </div>

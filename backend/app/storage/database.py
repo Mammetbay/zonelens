@@ -2,7 +2,7 @@
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -61,7 +61,7 @@ def record_event(event_dict: dict[str, Any]) -> int:
         direction = event_dict.get("direction")
         observed_duration = event_dict.get("dwell_seconds", event_dict.get("observed_duration"))
         payload_str = json.dumps(event_dict)
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         event_id = f"{event_type}_{track_id}_{int(video_time_ms)}_{now_iso}"
 
         with conn:
@@ -154,7 +154,7 @@ def save_setting(key: str, value: Any):
     conn = get_db_connection()
     try:
         val_str = json.dumps(value)
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now_iso = datetime.now(UTC).isoformat()
         with conn:
             conn.execute(
                 """

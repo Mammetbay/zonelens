@@ -61,5 +61,5 @@ visits with an explicit track-loss exit. Tracking IDs remain temporary.
 ## Later milestones
 
 - [x] FastAPI, SQLite event storage, and a React web interface.
-- [ ] Webcam/RTSP input and reconnection handling.
+- [x] Webcam, DirectShow virtual camera (DroidCam/Iriun), mobile streams, and RTSP input with automatic reconnection.
 - [ ] Parking occupancy and release packaging.

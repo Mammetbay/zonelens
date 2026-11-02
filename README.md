@@ -4,44 +4,41 @@ Local-first video analytics for IP cameras, webcams, and video files.
 
 ZoneLens is an open-source project for detecting and tracking objects, counting line crossings, and monitoring user-defined zones. The goal is to build a practical computer vision application that runs on your own computer.
 
-> **Status: working video-file prototype with line and zone rules.** YOLO11n person detection and ByteTrack tracking have been exercised on a real clip, including CUDA inference on Windows. Optional rules count line crossings, report observed zone occupancy, and record dwell alerts. Manual accuracy validation, camera input, and the web interface are still pending. See [implementation status](docs/roadmap.md).
+> **Status: Active local-first web application & CLI.** YOLO11n person detection and ByteTrack tracking run in real time on CUDA GPUs and CPUs. Features interactive bidirectional line counting, polygon zone occupancy and dwell alerts, SQLite event persistence, and a full-featured web dashboard. Supports local video files, USB webcams, virtual webcams (DroidCam, Iriun), mobile phone camera streams (IP Webcam, DroidCam WiFi), and RTSP IP cameras with automatic reconnection. See [implementation status](docs/roadmap.md).
 
-## Planned features
+## Features
 
-- Read video files, webcams, and RTSP camera streams.
-- Detect people and follow them with temporary tracking IDs.
-- Count line crossings in both directions.
-- Draw zones and count visible people inside them.
-- Create an event when someone stays in a zone beyond a configured time.
-- View live results and event history in a web interface.
-- Reconnect when a camera stream is interrupted.
-- Later: detect vehicles and monitor manually defined parking spaces.
+- **Universal Video Ingestion**: Read recorded video files, DirectShow USB/virtual webcams, mobile streams (DroidCam, IP Webcam), and RTSP cameras.
+- **Accurate Tracking**: Detect objects with YOLO11n and associate them across frames with ByteTrack temporary IDs.
+- **Bidirectional Line Crossing**: Interactive vector line drawing with directional `in` and `out` counts and configurable hysteresis deadbands.
+- **Polygon Zone Analytics**: Multi-vertex area drawing, real-time occupancy counting, and configurable dwell time alerts.
+- **Web Dashboard**: Interactive canvas for drawing lines and zones, low-latency live preview, real-time telemetry metrics (processing FPS, inference latency), and event history.
+- **Resilient Streaming**: Automatic reconnection with exponential backoff on stream drops and disconnects.
+- **Zero Cloud Dependency**: Runs 100% locally on your machine with SQLite storage and privacy-preserving architecture.
 
-## How it will work
+## How it works
 
-Video frames will pass through an object detector, a tracker, and a rule engine. The rule engine will turn movement into events such as line crossings and zone entries. A local API will provide the results to the web interface.
+Video frames pass through a universal source capture adapter into the YOLO11n detector and ByteTrack tracker. The rule engine evaluates trajectory vectors and polygon membership, streaming annotated frames via MJPEG and publishing telemetry and events to the React web interface via Server-Sent Events (SSE) and WebSockets.
 
-Tracking IDs are temporary labels, not personal identities. Face recognition and cross-camera identity matching are outside the initial scope.
+Tracking IDs are temporary labels, not personal identities. Face recognition and cross-camera identity matching are strictly outside the project scope.
 
 ## Stack
 
 | Component | Technology |
 | --- | --- |
-| Computer vision | Python, OpenCV, PyTorch, Ultralytics YOLO |
+| Computer vision | Python 3.11+, OpenCV, PyTorch, Ultralytics YOLO |
 | Object tracking | ByteTrack |
-| Backend (planned) | FastAPI |
-| Frontend (planned) | React, TypeScript, Vite |
-| Event storage (planned) | SQLite |
-| Live updates (planned) | WebSocket |
-
-The initial development target is Windows 11. The prototype uses a small pretrained model without fine-tuning. Initial measurements and their limitations are recorded in the [development guide](docs/development.md).
+| Backend API | FastAPI, Pydantic, Server-Sent Events (SSE), WebSockets |
+| Frontend Web UI | React 19, TypeScript, Vite, Lucide Icons |
+| Event storage | SQLite |
+| Development OS | Windows 11 / Linux |
 
 ## Roadmap
 
 - [x] **First prototype:** detect and track people in a video file.
 - [x] **Line counting & Zone rules:** count crossings, monitor polygon occupancy and dwell alerts.
 - [x] **Web interface:** draw lines and zones interactively, view live MJPEG stream, and browse SQLite events.
-- [ ] **Camera support:** connect an RTSP camera and handle stream interruptions.
+- [x] **Universal camera support:** connect USB webcams, virtual cameras (DroidCam/Iriun), mobile phone streams (IP Webcam, DroidCam WiFi), and RTSP IP cameras with automatic reconnection.
 - [ ] **Parking analysis:** estimate occupancy of manually defined parking spaces.
 - [ ] **First release:** provide setup instructions, sample videos, tests, and benchmarks.
 

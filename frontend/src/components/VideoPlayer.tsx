@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Eye, Edit3, Move, PlusSquare, Trash2, CheckCircle2, RotateCcw, AlertCircle, XCircle } from 'lucide-react';
-import type { RulesData, EditorTool, LineRule, ZoneRule } from '../types';
+import type { RulesData, EditorTool, LineRule, ZoneRule, Telemetry } from '../types';
 import {
   calculateRenderedVideoRect,
   clientToNormalizedVideo,
@@ -17,6 +17,7 @@ interface VideoPlayerProps {
   onSaveRules: (rules: RulesData) => void;
   isRunning: boolean;
   hasUnsavedRules?: boolean;
+  telemetry?: Telemetry | null;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({
@@ -25,6 +26,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
   onSaveRules,
   isRunning,
   hasUnsavedRules,
+  telemetry,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -581,26 +583,102 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({
           }}
         />
 
+        {/* Stream reconnecting toast */}
+        {telemetry?.status === 'reconnecting' && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '16px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              padding: '8px 18px',
+              background: 'rgba(245, 158, 11, 0.9)',
+              backdropFilter: 'blur(8px)',
+              borderRadius: 'var(--radius-full)',
+              color: '#FFFFFF',
+              fontSize: '13px',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: '0 4px 20px rgba(245, 158, 11, 0.4)',
+              zIndex: 15,
+            }}
+          >
+            <RotateCcw size={16} className="spin" />
+            <span>Camera stream interrupted, reconnecting...</span>
+          </div>
+        )}
+
         {!isRunning && (
           <div
             style={{
               position: 'absolute',
               inset: 0,
-              backgroundColor: 'rgba(3, 5, 8, 0.85)',
+              backgroundColor: 'rgba(3, 5, 8, 0.88)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
+              padding: '24px',
+              textAlign: 'center',
               gap: '12px',
               color: 'var(--text-dim)',
               zIndex: 5,
             }}
           >
-            <RotateCcw size={36} color="#9CA3AF" />
-            <p style={{ fontSize: '14px', fontWeight: 500, color: '#E5E7EB' }}>Video stream stopped.</p>
-            <p style={{ fontSize: '12px', color: '#9CA3AF' }}>
-              Click "Start Analysis" below or choose a source to run tracking.
-            </p>
+            {telemetry?.status === 'error' || telemetry?.error ? (
+              <div
+                style={{
+                  maxWidth: '540px',
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  borderRadius: '12px',
+                  padding: '18px 22px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '10px',
+                }}
+              >
+                <AlertCircle size={36} color="#EF4444" />
+                <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#FCA5A5', margin: 0 }}>
+                  Camera / Mobile Stream Connection Error
+                </h3>
+                <p style={{ fontSize: '12px', color: '#F87171', lineHeight: '1.5', margin: 0 }}>
+                  {telemetry?.error || 'Could not connect to camera or network stream.'}
+                </p>
+                <div
+                  style={{
+                    marginTop: '6px',
+                    padding: '10px 14px',
+                    background: 'rgba(0, 0, 0, 0.4)',
+                    borderRadius: '8px',
+                    textAlign: 'left',
+                    fontSize: '11px',
+                    color: '#E5E7EB',
+                    lineHeight: '1.6',
+                    width: '100%',
+                  }}
+                >
+                  <strong style={{ color: 'var(--accent-cyan)' }}>📱 Troubleshooting Checklist:</strong>
+                  <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                    <li>Ensure your phone and this PC are connected to the <strong>same Wi-Fi network</strong>.</li>
+                    <li>Verify that <strong>"Start server"</strong> is active in your mobile camera app.</li>
+                    <li>Stream URL format: <code>http://192.168.1.XX:8080/video</code> (IP Webcam) or <code>http://192.168.1.XX:4747/video</code> (DroidCam).</li>
+                    <li>For zero-latency wired connection: Install DroidCam/Iriun desktop client and select <strong>USB / Virtual Webcam</strong>.</li>
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <>
+                <RotateCcw size={36} color="#9CA3AF" />
+                <p style={{ fontSize: '14px', fontWeight: 500, color: '#E5E7EB', margin: 0 }}>Video stream stopped.</p>
+                <p style={{ fontSize: '12px', color: '#9CA3AF', margin: 0 }}>
+                  Select a video source below and click "Start Analysis".
+                </p>
+              </>
+            )}
           </div>
         )}
 

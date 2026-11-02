@@ -11,8 +11,10 @@ export interface ZoneStats {
 }
 
 export interface Telemetry {
-  status: 'stopped' | 'starting' | 'running' | 'paused' | 'completed' | 'error';
+  status: 'stopped' | 'starting' | 'running' | 'paused' | 'completed' | 'error' | 'reconnecting';
   source: string;
+  source_type?: string;
+  is_live?: boolean;
   loop: boolean;
   frame_index: number;
   source_fps: number;

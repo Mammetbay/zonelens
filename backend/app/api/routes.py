@@ -3,6 +3,7 @@
 import asyncio
 import time
 from typing import Any
+
 import torch
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -10,8 +11,9 @@ from pydantic import BaseModel, Field
 
 from app.api.websocket import manager
 from app.core.worker import VisionWorker
-from app.storage.database import clear_events, get_events, get_setting, save_setting
+from app.storage.database import clear_events, get_events, save_setting
 from app.vision.config import LineConfig, ZoneConfig
+from app.vision.source import list_available_cameras
 
 router = APIRouter(prefix="/api")
 
@@ -155,6 +157,11 @@ def reset_counts():
     return {"status": "reset"}
 
 
+@router.get("/source/devices")
+def get_source_devices():
+    return {"devices": list_available_cameras()}
+
+
 @router.get("/events")
 def list_events(
     limit: int = Query(default=50, ge=1, le=500),
@@ -209,7 +216,7 @@ async_loop: asyncio.AbstractEventLoop | None = None
 def broadcast_sse(msg: dict[str, Any]):
     global async_loop
     if async_loop is not None and async_loop.is_running():
-        for q in list(sse_subscribers):
+        for q in sse_subscribers:
             try:
                 async_loop.call_soon_threadsafe(q.put_nowait, msg)
             except Exception:

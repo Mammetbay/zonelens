@@ -1,10 +1,9 @@
 """Automated tests for FastAPI endpoints and database storage."""
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.main import app
 from app.storage.database import clear_events, init_db, record_event
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture(scope="module")

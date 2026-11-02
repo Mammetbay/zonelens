@@ -238,6 +238,7 @@ export const App: React.FC = () => {
             onSaveRules={handleSaveRules}
             isRunning={isRunning}
             hasUnsavedRules={hasUnsavedRules}
+            telemetry={telemetry}
           />
           <ControlsBar
             telemetry={telemetry}

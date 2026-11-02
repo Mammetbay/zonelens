@@ -6,19 +6,18 @@ import math
 import queue
 import threading
 import time
-from dataclasses import asdict
-from pathlib import Path
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import cv2
 import numpy as np
-import torch
 from ultralytics import YOLO
 
 from app.storage.database import record_event
 from app.vision.config import Config, LineConfig, ZoneConfig
 from app.vision.line_counter import LineCounter
 from app.vision.pipeline import inference_device_info, select_device
+from app.vision.source import classify_source, open_video_capture
 from app.vision.zone_monitor import ZoneMonitor
 
 
@@ -40,8 +39,10 @@ class VisionWorker:
         self._db_thread.start()
 
         # State fields
-        self.status: str = "stopped"  # stopped, running, paused, completed, error
+        self.status: str = "stopped"  # stopped, running, paused, completed, error, reconnecting
         self.source_path: str = "samples/people.mp4"
+        self.source_type: str = "file"
+        self.is_live: bool = False
         self.loop: bool = True
         self.error_message: str | None = None
 
@@ -113,6 +114,8 @@ class VisionWorker:
             return {
                 "status": self.status,
                 "source": self.source_path,
+                "source_type": self.source_type,
+                "is_live": self.is_live,
                 "loop": self.loop,
                 "frame_index": self.frame_index,
                 "source_fps": round(self.source_fps, 2),
@@ -176,7 +179,10 @@ class VisionWorker:
     def start(self, source: str = "samples/people.mp4", loop: bool = True, device: str = "auto"):
         self.stop()
 
-        self.source_path = source
+        info = classify_source(source)
+        self.source_path = str(source).strip()
+        self.source_type = info["type"]
+        self.is_live = bool(info["is_live"])
         self.loop = loop
         self.error_message = None
         self._reload_rules_flag = False
@@ -226,18 +232,8 @@ class VisionWorker:
             self.frame_condition.wait(timeout=timeout)
             return self.latest_jpeg
 
-    def _open_capture(self) -> cv2.VideoCapture:
-        # Check if source is webcam index (e.g. "0" or 0)
-        if self.source_path.isdigit():
-            cap = cv2.VideoCapture(int(self.source_path))
-        else:
-            path = Path(self.source_path)
-            if not path.is_file():
-                raise FileNotFoundError(f"Source video file not found: {path}")
-            cap = cv2.VideoCapture(str(path))
-        if not cap.isOpened():
-            raise RuntimeError(f"Failed to open video source: {self.source_path}")
-        return cap
+    def _open_capture(self) -> tuple[cv2.VideoCapture, bool]:
+        return open_video_capture(self.source_path)
 
     def _run_loop(self):
         cap = None
@@ -259,11 +255,12 @@ class VisionWorker:
                 self.active_device = actual_device
                 self.active_gpu = gpu
 
-            cap = self._open_capture()
+            cap, is_live = self._open_capture()
             fps = cap.get(cv2.CAP_PROP_FPS)
             if not math.isfinite(fps) or fps <= 0:
                 fps = 30.0
             with self.lock:
+                self.is_live = is_live
                 self.source_fps = fps
                 self.status = "running"
 
@@ -283,16 +280,73 @@ class VisionWorker:
 
                 ok, frame = cap.read()
                 if not ok:
-                    if self.loop and not self.source_path.isdigit():
-                        # Rewind video file
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                        ok, frame = cap.read()
-                        if not ok:
+                    if not is_live:
+                        if self.loop:
+                            # Rewind video file
+                            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                            ok, frame = cap.read()
+                            if not ok:
+                                break
+                        else:
+                            with self.lock:
+                                self.status = "completed"
                             break
                     else:
-                        with self.lock:
-                            self.status = "completed"
-                        break
+                        # Temporary Wi-Fi packet drop retry before full reconnect
+                        retried_ok = False
+                        for _ in range(3):
+                            time.sleep(0.04)
+                            if self.stop_event.is_set():
+                                break
+                            ok_retry, frame_retry = cap.read()
+                            if ok_retry:
+                                ok = True
+                                frame = frame_retry
+                                retried_ok = True
+                                break
+                        if retried_ok:
+                            pass
+                        else:
+                            # Live stream disconnected / interrupted
+                            with self.lock:
+                                self.status = "reconnecting"
+                                self.error_message = "Stream interrupted. Reconnecting..."
+                            self.emit_telemetry()
+
+                            try:
+                                cap.release()
+                            except Exception:
+                                pass
+                            cap = None
+
+                        reconnected = False
+                        reconnect_interval = 1.5
+                        while not self.stop_event.is_set():
+                            time.sleep(reconnect_interval)
+                            if self.stop_event.is_set():
+                                break
+                            try:
+                                new_cap, _ = self._open_capture()
+                                if new_cap.isOpened():
+                                    cap = new_cap
+                                    with self.lock:
+                                        self.status = "running"
+                                        self.error_message = None
+                                    # Reset tracker session on reconnection to avoid stale ID collision
+                                    try:
+                                        if hasattr(model, "predictor") and model.predictor is not None:
+                                            model.predictor.trackers = None
+                                    except Exception:
+                                        pass
+                                    self.emit_telemetry()
+                                    reconnected = True
+                                    break
+                            except Exception:
+                                reconnect_interval = min(5.0, reconnect_interval * 1.5)
+
+                        if not reconnected or self.stop_event.is_set():
+                            break
+                        continue
 
                 frame_count += 1
                 height, width = frame.shape[:2]
@@ -436,11 +490,12 @@ class VisionWorker:
                 if frame_count % 5 == 0:
                     self.emit_telemetry()
 
-                # Accurate frame timing to reach full video fps without stutter
-                target_frame_time = 1.0 / fps
-                frame_elapsed = time.perf_counter() - frame_start
-                if frame_elapsed < target_frame_time:
-                    time.sleep(target_frame_time - frame_elapsed)
+                # Accurate frame timing to reach full video fps without stutter (for video files)
+                if not is_live:
+                    target_frame_time = 1.0 / fps
+                    frame_elapsed = time.perf_counter() - frame_start
+                    if frame_elapsed < target_frame_time:
+                        time.sleep(target_frame_time - frame_elapsed)
 
         except Exception as exc:
             with self.lock:

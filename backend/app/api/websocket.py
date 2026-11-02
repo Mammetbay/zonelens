@@ -1,8 +1,8 @@
 """WebSocket manager for real-time ZoneLens telemetry and event broadcasting."""
 
 import asyncio
-import json
 from typing import Any
+
 from fastapi import WebSocket
 
 
